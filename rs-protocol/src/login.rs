@@ -616,15 +616,38 @@ pub fn game_login_reply(
     buf.data
 }
 
+/// The world's advertised address. The lobby hands it to the client, which dials it for the
+/// world, so it has to be an address the player can reach: a hardcoded loopback sends every
+/// remote player back to their own machine. `RS_NODE_HOST` carries this world's address.
+#[cfg(since_647)]
+fn host() -> String {
+    std::env::var("RS_NODE_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned())
+}
+
+/// The same address as a big-endian IPv4 integer, which the reply also carries (§ the `p4` after
+/// the account block). The client does not dial from it -- every socket it opens is built with
+/// `InetAddress.getByName(host)` plus `new Socket(InetAddress, port)`, i.e. from [`host`] above --
+/// so it is display/legacy data, but a fixed loopback there would still be wrong on a hosted
+/// world. Width is always 4 bytes, so the computed packet length is unaffected. A configured
+/// host that is not a dotted quad keeps the loopback int rather than inventing one.
+#[cfg(since_647)]
+fn host_ip() -> i32 {
+    host()
+        .parse::<std::net::Ipv4Addr>()
+        .map(|ip| i32::from_be_bytes(ip.octets()))
+        .unwrap_or(0x7f00_0001)
+}
+
 /// The lobby's login reply. Its account details are fixed: on 742 the flags
 /// byte says member with an active subscription, so the lobby shows no
 /// membership expiry.
 #[cfg(since_647)]
 pub fn lobby_login_reply(display_name: &str, world: u16) -> Vec<u8> {
+    let host = host();
     #[cfg(before_742)]
-    let len = 59 + Packet::sizejstr(display_name);
+    let len = 49 + Packet::sizejstr(&host) + Packet::sizejstr(display_name);
     #[cfg(since_742)]
-    let len = 68 + Packet::sizejstr(display_name);
+    let len = 58 + Packet::sizejstr(&host) + Packet::sizejstr(display_name);
     let mut buf = Packet::new(2 + len);
     buf.p1(LoginResponse::SuccessNormal as u8);
     buf.p1(len as u8);
@@ -640,7 +663,7 @@ pub fn lobby_login_reply(display_name: &str, world: u16) -> Vec<u8> {
         buf.p1(0);
         buf.p4(0);
         buf.p1(3);
-        buf.p4(0x7f000001u32 as i32);
+        buf.p4(host_ip());
         buf.p2(0);
         buf.p2(0);
         buf.p2(0);
@@ -666,7 +689,7 @@ pub fn lobby_login_reply(display_name: &str, world: u16) -> Vec<u8> {
         buf.p2(0);
         buf.p2(0);
         buf.p2(0);
-        buf.p4(0x7f000001u32 as i32);
+        buf.p4(host_ip());
         buf.p1(3);
     }
     buf.p2(0xD1DF);
@@ -679,7 +702,7 @@ pub fn lobby_login_reply(display_name: &str, world: u16) -> Vec<u8> {
     buf.p1(0);
     buf.p2(world);
     buf.p1(0);
-    buf.pjstr("127.0.0.1", 0);
+    buf.pjstr(&host, 0);
     buf.data
 }
 

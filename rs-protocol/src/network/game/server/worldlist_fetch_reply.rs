@@ -6,7 +6,10 @@ use rs_io::{Packet, PacketFrame};
 use rs_protocol_macros::server_prot;
 
 const LOCATION: &str = "Otherworld";
-const HOST: &str = "127.0.0.1";
+
+fn host() -> String {
+    std::env::var("RS_NODE_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned())
+}
 
 /// The world list with this world alone, in one location.
 #[server_prot(WorldlistFetchReply, Immediate, VarShort)]
@@ -36,7 +39,7 @@ impl ServerProtMessage for WorldlistFetchReply {
         buf.p1(0);
         buf.pjstr("", 0);
         buf.p1(0);
-        buf.pjstr(HOST, 0);
+        buf.pjstr(&host(), 0);
 
         buf.p4(0);
 
@@ -46,6 +49,6 @@ impl ServerProtMessage for WorldlistFetchReply {
 
     fn sizeof(&self) -> usize {
         let smart = if self.world < 128 { 1 } else { 2 };
-        22 + 2 * smart + Packet::sizejstr(LOCATION) + Packet::sizejstr("") + Packet::sizejstr(HOST)
+        22 + 2 * smart + Packet::sizejstr(LOCATION        ) + Packet::sizejstr("") + Packet::sizejstr(&host())
     }
 }
